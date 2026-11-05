@@ -413,23 +413,15 @@ public:
 
   /// Returns true if \p V is known to be non-negative, either because the
   /// signed system implies it or because ValueTracking can prove it.
-  bool isKnownNonNegative(WithCache<const Value *> &V);
-  bool isKnownNonNegative(Value *V) {
-    WithCache<const Value *> KnownV{V};
-    return isKnownNonNegative(KnownV);
-  }
+  bool isKnownNonNegative(const WithCache<Value *> &V);
 
   /// Returns true if \p V is known to be negative, either because the signed
   /// system implies it, or because ValueTracking can prove it.
-  bool isKnownNegative(WithCache<const Value *> &V);
-  bool isKnownNegative(Value *V) {
-    WithCache<const Value *> KnownV{V};
-    return isKnownNegative(KnownV);
-  }
+  bool isKnownNegative(const WithCache<Value *> &V);
 
   /// Returns true if \p V is known to be positive, either because the signed
   /// system implies it or because ValueTracking can prove it.
-  bool isKnownPositive(Value *V);
+  bool isKnownPositive(const WithCache<Value *> &V);
 
   void addFact(CmpInst::Predicate Pred, Value *A, Value *B, unsigned NumIn,
                unsigned NumOut, SmallVectorImpl<StackEntry> &DFSInStack);
@@ -1158,24 +1150,22 @@ bool ConstraintInfo::doesHold(CmpInst::Predicate Pred, Value *A, Value *B) {
       .value_or(false);
 }
 
-bool ConstraintInfo::isKnownNonNegative(WithCache<const Value *> &V) {
+bool ConstraintInfo::isKnownNonNegative(const WithCache<Value *> &V) {
   if (auto *CI = dyn_cast<ConstantInt>(V.getValue()))
     return !CI->isNegative();
   return ::isKnownNonNegative(V, DL) ||
-         doesHold(CmpInst::ICMP_SGE, const_cast<Value *>(V.getValue()),
-                  ConstantInt::get(V->getType(), 0));
+         doesHold(CmpInst::ICMP_SGE, V, ConstantInt::get(V->getType(), 0));
 }
 
-bool ConstraintInfo::isKnownNegative(WithCache<const Value *> &V) {
+bool ConstraintInfo::isKnownNegative(const WithCache<Value *> &V) {
   if (auto *CI = dyn_cast<ConstantInt>(V.getValue()))
     return CI->isNegative();
   return ::isKnownNegative(V, DL) ||
-         doesHold(CmpInst::ICMP_SLT, const_cast<Value *>(V.getValue()),
-                  ConstantInt::get(V->getType(), 0));
+         doesHold(CmpInst::ICMP_SLT, V, ConstantInt::get(V->getType(), 0));
 }
 
-bool ConstraintInfo::isKnownPositive(Value *V) {
-  if (auto *CI = dyn_cast<ConstantInt>(V))
+bool ConstraintInfo::isKnownPositive(const WithCache<Value *> &V) {
+  if (auto *CI = dyn_cast<ConstantInt>(V.getValue()))
     return CI->getValue().isStrictlyPositive();
   return ::isKnownPositive(V, DL) ||
          doesHold(CmpInst::ICMP_SGT, V, ConstantInt::get(V->getType(), 0));
@@ -2662,7 +2652,7 @@ static bool eliminateConstraints(Function &F, DominatorTree &DT, LoopInfo &LI,
           // The operands also have the same sign: if one of them is known to
           // be non-negative (or negative), so is the other.
           if (A->getType()->isIntegerTy()) {
-            WithCache<const Value *> KnownA{A}, KnownB{B};
+            WithCache<Value *> KnownA{A}, KnownB{B};
             Constant *Zero = Constant::getNullValue(A->getType());
             bool ANonNeg = Info.isKnownNonNegative(KnownA);
             bool BNonNeg = Info.isKnownNonNegative(KnownB);
